@@ -32,7 +32,7 @@ export const findRoomFactory = () =>
 class Room {
   private readonly id: string;
   private readonly sockets: Set<WebSocket>;
-  private readonly players: Map<string, { name: string }>;
+  private readonly players: Map<string, { name: string; isHost: boolean }>;
 
   private coll: Collection<Bson.Document>;
 
@@ -67,7 +67,16 @@ class Room {
             : playerId;
 
           if (!this.players.has(actualPlayerId)) {
-            this.players.set(actualPlayerId, { name: generateSlug(1) });
+            this.players.set(actualPlayerId, {
+              name: generateSlug(1),
+              isHost: false,
+            });
+          }
+          if (this.players.size === 1) {
+            this.players.set(actualPlayerId, {
+              ...this.players.get(actualPlayerId)!,
+              isHost: true,
+            });
           }
 
           this.sendJoined(ws, actualPlayerId);
@@ -106,9 +115,10 @@ class Room {
   private sendUpdateRoom(ws: WebSocket, trigger: string) {
     const players: { id: string; name: string }[] = Array
       .from(this.players.entries())
-      .map(([id, { name }]) => ({
+      .map(([id, { name, isHost }]) => ({
         id: id,
         name: name,
+        is_host: isHost,
       }));
 
     this.sockets.forEach((ws) => {
