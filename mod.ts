@@ -1,8 +1,8 @@
 import { bold, yellow } from "std/fmt/colors";
 import { Application, Router } from "oak";
 import { oakCors } from "cors";
-import { Bson, MongoClient } from "mongo";
-import { generateSlug } from "https://cdn.skypack.dev/random-word-slugs?dts";
+import { MongoClient } from "mongo";
+import { createRoomFactory, findRoomFactory } from "./room.ts";
 
 const app = new Application();
 const router = new Router();
@@ -12,6 +12,9 @@ await mongo.connect(Deno.env.get("MONGO_URI")!);
 
 const roomsCol = mongo.database().collection("rooms");
 const gamesCol = mongo.database().collection("games");
+
+const createRoom = createRoomFactory(roomsCol);
+const findRoom = findRoomFactory();
 
 export const validateRoomParams = (
   params: { lang: string },
@@ -27,21 +30,8 @@ export const validateRoomParams = (
 
   return invalids;
 };
-export const createRoom = async (
-  params: { lang: string },
-): Promise<{ id: string; slug: string }> => {
-  const slug = generateSlug(3, { format: "kebab" });
 
-  const oid: Bson.ObjectId = await roomsCol.insertOne({
-    slug: slug,
-    expired: false,
-    createdAt: new Date(),
-  });
-
-  return { id: oid.toString(), slug };
-};
-
-router.post("/create/room", async (context) => {
+router.post("/room/create", async (context) => {
   if (!context.request.hasBody) {
     context.response.status = 400;
     context.response.body = {
@@ -66,7 +56,7 @@ router.post("/create/room", async (context) => {
   }
 
   try {
-    const room = await createRoom({ lang });
+    const room = await createRoom();
     context.response.status = 200;
     context.response.body = {
       room_id: room.id,
@@ -79,6 +69,23 @@ router.post("/create/room", async (context) => {
       title: "Failed to create room.",
     }; // TODO: RFC7807
   }
+});
+
+
+router.get("/rooms/:slug/join", async (context) => {
+  const { slug } = context.params;
+  const room = findRoom(slug);
+  if (!room) {
+    context.response.status = 404;
+    context.response.body = {
+      title: "Active room was not found.",
+    }; // TODO: RFC7807
+    return;
+  }
+
+  const ws = await context.upgrade();
+  room.addSocket(ws);
+  return;
 });
 
 app.use(oakCors());
