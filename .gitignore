@@ -1,0 +1,13 @@
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env*
+!.env.example
+
+# Output
+dist/
+
+# Coverage
+cov_profile/

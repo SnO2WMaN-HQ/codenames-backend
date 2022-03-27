@@ -1,0 +1,15 @@
+scripts:
+  dev:
+    cmd: deno run --watch --allow-net --allow-env=PORT,MONGO_URI --importmap=./import_map.json ./mod.ts
+
+  lint:
+    cmd: deno lint
+
+  fmt:
+    cmd: deno fmt
+
+  test:
+    cmd: deno test --reload --importmap=./import_map.json --coverage=./cov_profile
+
+  cov:
+    cmd: deno coverage ./cov_profile

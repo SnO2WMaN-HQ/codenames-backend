@@ -1,0 +1,18 @@
+{
+  "$schema": "https://deno.land/x/deno/cli/schemas/config-file.v1.json",
+  "lint": {
+    "files": {
+      "exclude": ["mongo_initdb"]
+    }
+  },
+  "fmt": {
+    "options": {
+      "indentWidth": 2,
+      "singleQuote": false,
+      "useTabs": false
+    },
+    "files": {
+      "exclude": ["mongo_initdb", "cov_profile"]
+    }
+  }
+}
