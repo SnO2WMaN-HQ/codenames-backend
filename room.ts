@@ -60,18 +60,23 @@ class Room {
       switch (data.method) {
         case "JOIN": {
           const { payload } = data;
-          const { playerId = crypto.randomUUID() } = payload;
+          const { player_id: playerId } = payload;
 
-          if (!this.players.has(playerId)) {
-            this.players.set(playerId, { name: generateSlug(1) });
+          const actualPlayerId: string = playerId === null
+            ? crypto.randomUUID()
+            : playerId;
+
+          if (!this.players.has(actualPlayerId)) {
+            this.players.set(actualPlayerId, { name: generateSlug(1) });
           }
 
-          this.broadcast(playerId);
+          this.sendJoined(ws, actualPlayerId);
+          this.sendUpdateRoom(ws, actualPlayerId);
           break;
         }
         case "RENAME": {
           const { payload } = data;
-          const { playerId, newName } = payload;
+          const { player_id: playerId, new_name: newName } = payload;
 
           if (!playerId || typeof playerId !== "string") break;
           if (!newName || typeof newName !== "string") break;
@@ -80,7 +85,7 @@ class Room {
           const prev = this.players.get(playerId)!;
           this.players.set(playerId, { ...prev, name: newName });
 
-          this.broadcast(playerId);
+          this.sendUpdateRoom(ws, playerId);
 
           break;
         }
@@ -92,22 +97,29 @@ class Room {
     this.sockets.delete(ws);
   }
 
-  private broadcast(trigger: string) {
+  private sendJoined(ws: WebSocket, playerId: string) {
+    ws.send(JSON.stringify(
+      { method: "JOINED", payload: { player_id: playerId } },
+    ));
+  }
+
+  private sendUpdateRoom(ws: WebSocket, trigger: string) {
     const players: { id: string; name: string }[] = Array
       .from(this.players.entries())
       .map(([id, { name }]) => ({
         id: id,
         name: name,
-        isYou: trigger === id,
       }));
-    const payload = { players };
 
-    const data = JSON.stringify({
-      method: "UPDATE_ROOM_INFO",
-      payload: payload,
-    });
     this.sockets.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(data);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(
+          {
+            method: "UPDATE_ROOM",
+            payload: { players },
+          },
+        ));
+      }
     });
   }
 
