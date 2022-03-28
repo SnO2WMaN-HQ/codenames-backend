@@ -143,12 +143,18 @@ class Room {
     const payload: {
       for: "all";
       deck: { key: number; word: string; suggested_by: string[] }[];
+      players: { player_id: string; team: number; is_spymaster: boolean }[];
     } = {
       for: "all",
       deck: represent.deck.map(({ key, suggestedBy, word }) => ({
         key,
         word,
         suggested_by: suggestedBy,
+      })),
+      players: represent.players.map(({ playerId, spymaster, team }) => ({
+        player_id: playerId,
+        team,
+        is_spymaster: spymaster,
       })),
     };
     this.sockets.forEach((ws) => {
@@ -201,6 +207,32 @@ class Room {
         }
         const { player_id: playerId, key } = payload;
         this.currentGame.select(playerId, key);
+        this.reqSyncGame(playerId);
+        break;
+      }
+      case "join_operative": {
+        if (
+          !((p): p is { player_id: string; team: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "team" in p && typeof (p as any).team === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, team } = payload;
+        this.currentGame.joinOperative(playerId, team);
+        this.reqSyncGame(playerId);
+        break;
+      }
+      case "join_spymaster": {
+        if (
+          !((p): p is { player_id: string; team: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "team" in p && typeof (p as any).team === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, team } = payload;
+        this.currentGame.joinSpymaseter(playerId, team);
         this.reqSyncGame(playerId);
         break;
       }

@@ -31,14 +31,19 @@ export const sortingCards = (
 };
 
 export class Game {
-  private readonly deck: {
+  private teamsCount: number;
+  private playerRoles: Map<string, { team: number; spymaster: boolean }>;
+
+  private deck: {
     word: string;
     role: number;
     suggestedBy: Set<string>;
   }[];
-  private readonly history: (
+  private history: (
     | { type: "add_suggest"; playerId: string; key: number }
     | { type: "remove_suggest"; playerId: string; key: number }
+    | { type: "join_operative"; playerId: string; team: number }
+    | { type: "join_spymaster"; playerId: string; team: number }
   )[];
 
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
@@ -49,11 +54,16 @@ export class Game {
         : teamAssign.findIndex((tm) => tm.includes(index)) + 1,
       suggestedBy: new Set(),
     }));
+
+    this.teamsCount = teamAssign.length;
+    this.playerRoles = new Map();
+
     this.history = [];
   }
 
   repesentForAll(): {
     deck: { key: number; word: string; suggestedBy: string[] }[];
+    players: { playerId: string; team: number; spymaster: boolean }[];
   } {
     return {
       deck: this.deck.map(
@@ -64,6 +74,9 @@ export class Game {
             suggestedBy: Array.from(suggestedBy.values()),
           }
         ),
+      ),
+      players: Array.from(this.playerRoles.entries()).map(
+        ([playerId, { team, spymaster }]) => ({ playerId, team, spymaster }),
       ),
     };
   }
@@ -92,6 +105,24 @@ export class Game {
 
   select(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
+
+    return true;
+  }
+
+  joinOperative(playerId: string, team: number): boolean {
+    if (team < 1 || this.teamsCount < team) return false;
+
+    this.playerRoles.set(playerId, { team, spymaster: false });
+    this.history.push({ type: "join_operative", playerId, team });
+
+    return true;
+  }
+
+  joinSpymaseter(playerId: string, team: number): boolean {
+    if (team < 1 || this.teamsCount < team) return false;
+
+    this.playerRoles.set(playerId, { team, spymaster: true });
+    this.history.push({ type: "join_spymaster", playerId, team });
 
     return true;
   }
