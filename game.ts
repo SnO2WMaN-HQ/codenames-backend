@@ -36,8 +36,10 @@ export class Game {
     role: number;
     suggestedBy: Set<string>;
   }[];
-  private readonly history:
-    ({ type: "suggest"; playerId: string; key: number })[];
+  private readonly history: (
+    | { type: "add_suggest"; playerId: string; key: number }
+    | { type: "remove_suggest"; playerId: string; key: number }
+  )[];
 
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
     this.deck = words.map((word, index) => ({
@@ -70,11 +72,20 @@ export class Game {
     return true;
   }
 
-  suggest(playerId: string, key: number): boolean {
+  addSuggest(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
 
     this.deck[key].suggestedBy.add(playerId);
-    this.history.push({ type: "suggest", key, playerId });
+    this.history.push({ type: "add_suggest", key, playerId });
+
+    return true;
+  }
+
+  removeSuggest(playerId: string, key: number): boolean {
+    if (key < 0 || this.deck.length <= key) return false;
+
+    this.deck[key].suggestedBy.delete(playerId);
+    this.history.push({ type: "remove_suggest", key, playerId });
 
     return true;
   }

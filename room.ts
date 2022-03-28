@@ -163,7 +163,7 @@ class Room {
     if (!payload || typeof payload !== "object" || !("type" in payload)) return; // TODO: no type
 
     switch ((payload as { type: string }).type) {
-      case "suggest": {
+      case "add_suggest": {
         if (
           !((p): p is { player_id: string; key: number } =>
             "player_id" in p && typeof (p as any).player_id === "string" &&
@@ -173,7 +173,21 @@ class Room {
         }
 
         const { player_id: playerId, key } = payload;
-        this.currentGame.suggest(playerId, key);
+        this.currentGame.addSuggest(playerId, key);
+        this.reqSyncGame(playerId);
+        break;
+      }
+      case "remove_suggest": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break; // TODO: invalid payload
+        }
+
+        const { player_id: playerId, key } = payload;
+        this.currentGame.removeSuggest(playerId, key);
         this.reqSyncGame(playerId);
         break;
       }
