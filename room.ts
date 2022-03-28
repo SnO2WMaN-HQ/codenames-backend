@@ -87,6 +87,8 @@ class Room {
 
           this.sendJoined(ws, actualPlayerId);
           this.sendUpdateRoom(ws, actualPlayerId);
+          this.reqSyncGame(actualPlayerId);
+
           break;
         }
         case "RENAME": {
@@ -122,9 +124,76 @@ class Room {
 
           this.currentGame = createGame({ deadWords, wordsAssign, wordsCount });
           this.sendUpdateRoom(ws, playerId);
+          this.reqSyncGame(playerId);
+          break;
+        }
+        case "UPDATE_GAME": {
+          const { payload } = data;
+          this.receievedUpdateGame(ws, payload);
         }
       }
     });
+  }
+
+  private reqSyncGame(playerId: string) {
+    if (!this.currentGame) return;
+
+    const represent = this.currentGame.repesentForAll();
+
+    const payload: {
+      for: "all";
+      deck: { key: number; word: string; suggested_by: string[] }[];
+    } = {
+      for: "all",
+      deck: represent.deck.map(({ key, suggestedBy, word }) => ({
+        key,
+        word,
+        suggested_by: suggestedBy,
+      })),
+    };
+    this.sockets.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
+      }
+    });
+  }
+
+  private receievedUpdateGame(ws: WebSocket, payload: unknown) {
+    if (!this.currentGame) return; // TODO: no game
+    if (!payload || typeof payload !== "object" || !("type" in payload)) return; // TODO: no type
+
+    switch ((payload as { type: string }).type) {
+      case "suggest": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break;
+        }
+
+        const { player_id: playerId, key } = payload;
+        this.currentGame.suggest(playerId, key);
+        this.reqSyncGame(playerId);
+        break;
+      }
+      case "select": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, key } = payload;
+        this.currentGame.select(playerId, key);
+        this.reqSyncGame(playerId);
+        break;
+      }
+      default: { // invalid type
+        break;
+      }
+    }
   }
 
   removeSocket(ws: WebSocket) {

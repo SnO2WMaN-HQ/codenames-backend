@@ -31,14 +31,58 @@ export const sortingCards = (
 };
 
 export class Game {
-  private words: string[];
-  private teamAssign: number[][];
-  private deadAssign: number[];
+  private readonly deck: {
+    word: string;
+    role: number;
+    suggestedBy: Set<string>;
+  }[];
+  private readonly history:
+    ({ type: "suggest"; playerId: string; key: number })[];
 
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
-    this.words = words;
-    this.teamAssign = teamAssign;
-    this.deadAssign = deadAssign;
+    this.deck = words.map((word, index) => ({
+      word: word,
+      role: deadAssign.includes(index)
+        ? -1
+        : teamAssign.findIndex((tm) => tm.includes(index)) + 1,
+      suggestedBy: new Set(),
+    }));
+    this.history = [];
+  }
+
+  repesentForAll(): {
+    deck: { key: number; word: string; suggestedBy: string[] }[];
+  } {
+    return {
+      deck: this.deck.map(
+        ({ word, suggestedBy }, i) => (
+          {
+            key: i,
+            word,
+            suggestedBy: Array.from(suggestedBy.values()),
+          }
+        ),
+      ),
+    };
+  }
+
+  private isSpyMaseter(playerId: string) {
+    return true;
+  }
+
+  suggest(playerId: string, key: number): boolean {
+    if (key < 0 || this.deck.length <= key) return false;
+
+    this.deck[key].suggestedBy.add(playerId);
+    this.history.push({ type: "suggest", key, playerId });
+
+    return true;
+  }
+
+  select(playerId: string, key: number): boolean {
+    if (key < 0 || this.deck.length <= key) return false;
+
+    return true;
   }
 }
 
