@@ -2,6 +2,8 @@ import { Bson, Collection } from "mongo";
 
 import { generateSlug } from "random-word-slugs";
 
+import { createGame, Game } from "./game.ts";
+
 export const slugsMap = new Map<string, string>();
 export const roomsMap = new Map<string, Room>();
 export const createRoomFactory = (
@@ -37,12 +39,16 @@ class Room {
   private coll: Collection<Bson.Document>;
 
   private breakTimeout: number | null;
+
+  private currentGame: Game | null;
   constructor(id: string, collection: Collection<Bson.Document>) {
     this.id = id;
     this.sockets = new Set();
     this.players = new Map();
 
     this.coll = collection;
+
+    this.currentGame = null;
 
     this.breakTimeout = null;
   }
@@ -98,6 +104,25 @@ class Room {
 
           break;
         }
+        case "START_GAME": {
+          if (this.currentGame) {
+            // TODO: すでに始まっているのにゲーム開始したときの挙動
+            return;
+          }
+
+          const { payload } = data;
+          const {
+            player_id: playerId,
+            words_count: wordsCount,
+            words_assign: wordsAssign,
+            dead_words: deadWords,
+          } = payload;
+
+          // TODO: check player is host?
+
+          this.currentGame = createGame({ deadWords, wordsAssign, wordsCount });
+          this.sendUpdateRoom(ws, playerId);
+        }
       }
     });
   }
@@ -126,7 +151,7 @@ class Room {
         ws.send(JSON.stringify(
           {
             method: "UPDATE_ROOM",
-            payload: { players },
+            payload: { players, is_playing: this.currentGame !== null },
           },
         ));
       }
