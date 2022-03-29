@@ -33,7 +33,6 @@ export const findRoomFactory = () =>
 
 class Room {
   private readonly id: string;
-  private readonly sockets: Set<WebSocket>;
   private readonly players: Map<string, { name: string; isHost: boolean }>;
 
   private coll: Collection<Bson.Document>;
@@ -41,9 +40,9 @@ class Room {
   private breakTimeout: number | null;
 
   private currentGame: Game | null;
+  private socketsMap: Map<WebSocket, { playerId: string }>;
   constructor(id: string, collection: Collection<Bson.Document>) {
     this.id = id;
-    this.sockets = new Set();
     this.players = new Map();
 
     this.coll = collection;
@@ -51,11 +50,11 @@ class Room {
     this.currentGame = null;
 
     this.breakTimeout = null;
+
+    this.socketsMap = new Map();
   }
 
   addSocket(ws: WebSocket) {
-    this.sockets.add(ws);
-
     ws.addEventListener("message", (event) => {
       const data = JSON.parse(event.data);
       if (!("method" in data)) {
@@ -88,6 +87,8 @@ class Room {
           this.sendJoined(ws, actualPlayerId);
           this.sendUpdateRoom(ws, actualPlayerId);
           this.reqSyncGame(actualPlayerId);
+
+          this.socketsMap.set(ws, { playerId: actualPlayerId });
 
           break;
         }
@@ -163,7 +164,7 @@ class Room {
         spymasters: spymasters.map(({ playerId }) => ({ player_id: playerId })),
       })),
     };
-    this.sockets.forEach((ws) => {
+    this.socketsMap.forEach(({ playerId }, ws) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
       }
@@ -284,10 +285,6 @@ class Room {
     }
   }
 
-  removeSocket(ws: WebSocket) {
-    this.sockets.delete(ws);
-  }
-
   private sendJoined(ws: WebSocket, playerId: string) {
     ws.send(JSON.stringify(
       { method: "JOINED", payload: { player_id: playerId } },
@@ -303,14 +300,12 @@ class Room {
         is_host: isHost,
       }));
 
-    this.sockets.forEach((ws) => {
+    this.socketsMap.forEach(({ playerId }, ws) => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(
-          {
-            method: "UPDATE_ROOM",
-            payload: { players, is_playing: this.currentGame !== null },
-          },
-        ));
+        ws.send(JSON.stringify({
+          method: "UPDATE_ROOM",
+          payload: { players, is_playing: this.currentGame !== null },
+        }));
       }
     });
   }
