@@ -32,7 +32,11 @@ export const sortingCards = (
 
 export class Game {
   private teamsCount: number;
-  private playerRoles: Map<string, { team: number; spymaster: boolean }>;
+  private playerRoles: Map<string, {
+    team: number; // turn + 1
+
+    spymaster: boolean;
+  }>;
 
   private deck: {
     word: string;
@@ -46,6 +50,8 @@ export class Game {
     | { type: "join_operative"; playerId: string; team: number }
     | { type: "join_spymaster"; playerId: string; team: number }
   )[];
+
+  private turn: number;
 
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
     this.deck = words.map((word, index) => ({
@@ -61,6 +67,7 @@ export class Game {
     this.playerRoles = new Map();
 
     this.history = [];
+    this.turn = 0;
   }
 
   represent(playerId: string) {
@@ -95,11 +102,20 @@ export class Game {
         .map(([playerId]) => ({ playerId })),
     }));
 
-    return { deck, teams };
+    return {
+      turn: this.turn + 1,
+      deck,
+      teams,
+    };
   }
 
   addSuggest(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
+
+    if (this.deck[key].suggestedBy.has(playerId)) return false;
+
+    const player = this.playerRoles.get(playerId);
+    if (!player || player.spymaster || this.turn === player.team) return false;
 
     this.deck[key].suggestedBy.add(playerId);
     this.history.push({ type: "add_suggest", key, playerId });
@@ -109,6 +125,10 @@ export class Game {
 
   removeSuggest(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
+    if (!this.deck[key].suggestedBy.has(playerId)) return false;
+
+    const player = this.playerRoles.get(playerId);
+    if (!player || player.spymaster || this.turn === player.team) return false;
 
     this.deck[key].suggestedBy.delete(playerId);
     this.history.push({ type: "remove_suggest", key, playerId });
@@ -124,7 +144,7 @@ export class Game {
 
   joinOperative(playerId: string, team: number): boolean {
     if (team < 1 || this.teamsCount < team) return false;
-    if (this.playerRoles.get(playerId)?.spymaster) return false; // すでにspymasterなら棄却
+    if (this.playerRoles.has(playerId)) return false;
 
     this.playerRoles.set(playerId, { team, spymaster: false });
     this.history.push({ type: "join_operative", playerId, team });
@@ -134,7 +154,9 @@ export class Game {
 
   joinSpymaseter(playerId: string, team: number): boolean {
     if (team < 1 || this.teamsCount < team) return false;
-    if (this.playerRoles.has(playerId)) return false; // すでにどこかのチームなら棄却
+
+    const player = this.playerRoles.get(playerId);
+    if (!player || player.team !== team || player.spymaster) return false;
 
     this.playerRoles.set(playerId, { team, spymaster: true });
     this.history.push({ type: "join_spymaster", playerId, team });

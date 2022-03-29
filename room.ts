@@ -41,6 +41,7 @@ class Room {
 
   private currentGame: Game | null;
   private socketsMap: Map<WebSocket, { playerId: string }>;
+
   constructor(id: string, collection: Collection<Bson.Document>) {
     this.id = id;
     this.players = new Map();
@@ -260,12 +261,14 @@ class Room {
         if (!represent) return;
 
         const payload: {
+          turn: number;
           deck: { key: number; word: string; suggested_by: string[] }[];
           teams: {
             operatives: { player_id: string }[];
             spymasters: { player_id: string }[];
           }[];
         } = {
+          turn: represent.turn,
           deck: represent.deck.map(({ key, suggestedBy, word, role }) => ({
             key,
             word,
