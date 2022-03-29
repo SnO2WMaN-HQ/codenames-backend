@@ -96,6 +96,45 @@ export class Game {
     };
   }
 
+  repesentForSpymaster(): {
+    deck: { key: number; word: string; suggestedBy: string[]; role: number }[];
+    teams: {
+      operatives: { playerId: string }[];
+      spymasters: { playerId: string }[];
+    }[];
+  } {
+    const deck: {
+      key: number;
+      word: string;
+      suggestedBy: string[];
+      role: number;
+    }[] = this.deck.map(
+      ({ word, suggestedBy, role }, i) => (
+        {
+          key: i,
+          word,
+          role,
+          suggestedBy: Array.from(suggestedBy.values()),
+        }
+      ),
+    );
+    const teams: {
+      operatives: { playerId: string }[];
+      spymasters: { playerId: string }[];
+    }[] = [...new Array(this.teamsCount)].map((_, i) => ({
+      operatives: Array
+        .from(this.playerRoles.entries())
+        .filter(([, { team, spymaster }]) => (!spymaster && team === i + 1))
+        .map(([playerId]) => ({ playerId })),
+      spymasters: Array
+        .from(this.playerRoles.entries())
+        .filter(([, { team, spymaster }]) => (spymaster && team === i + 1))
+        .map(([playerId]) => ({ playerId })),
+    }));
+
+    return { deck: deck, teams };
+  }
+
   private isSpyMaseter(playerId: string) {
     return true;
   }
@@ -126,6 +165,7 @@ export class Game {
 
   joinOperative(playerId: string, team: number): boolean {
     if (team < 1 || this.teamsCount < team) return false;
+    if (this.playerRoles.get(playerId)?.spymaster) return false; // すでにspymasterなら棄却
 
     this.playerRoles.set(playerId, { team, spymaster: false });
     this.history.push({ type: "join_operative", playerId, team });
@@ -135,6 +175,7 @@ export class Game {
 
   joinSpymaseter(playerId: string, team: number): boolean {
     if (team < 1 || this.teamsCount < team) return false;
+    if (this.playerRoles.has(playerId)) return false; // すでにどこかのチームなら棄却
 
     this.playerRoles.set(playerId, { team, spymaster: true });
     this.history.push({ type: "join_spymaster", playerId, team });

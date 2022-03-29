@@ -170,6 +170,39 @@ class Room {
     });
   }
 
+  private reqSyncForSpymaster(ws: WebSocket, playerId: string) {
+    if (!this.currentGame) return;
+
+    const represent = this.currentGame.repesentForSpymaster();
+
+    const payload: {
+      for: "spymaster";
+      deck: {
+        key: number;
+        word: string;
+        role: number;
+        suggested_by: string[];
+      }[];
+      teams: {
+        operatives: { player_id: string }[];
+        spymasters: { player_id: string }[];
+      }[];
+    } = {
+      for: "spymaster",
+      deck: represent.deck.map(({ key, suggestedBy, role, word }) => ({
+        key,
+        word,
+        role,
+        suggested_by: suggestedBy,
+      })),
+      teams: represent.teams.map(({ operatives, spymasters }) => ({
+        operatives: operatives.map(({ playerId }) => ({ player_id: playerId })),
+        spymasters: spymasters.map(({ playerId }) => ({ player_id: playerId })),
+      })),
+    };
+    ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
+  }
+
   private receievedUpdateGame(ws: WebSocket, payload: unknown) {
     if (!this.currentGame) return; // TODO: no game
     if (!payload || typeof payload !== "object" || !("type" in payload)) return; // TODO: no type
@@ -238,8 +271,11 @@ class Room {
           break;
         }
         const { player_id: playerId, team } = payload;
-        this.currentGame.joinSpymaseter(playerId, team);
-        this.reqSyncGame(playerId);
+        const mr = this.currentGame.joinSpymaseter(playerId, team);
+        if (!mr) {
+          this.reqSyncGame(playerId);
+          this.reqSyncForSpymaster(ws, playerId);
+        }
         break;
       }
       default: { // invalid type
