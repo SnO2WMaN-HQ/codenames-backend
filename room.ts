@@ -65,31 +65,7 @@ class Room {
       switch (data.method) {
         case "JOIN": {
           const { payload } = data;
-          const { player_id: playerId } = payload;
-
-          const actualPlayerId: string = playerId === null
-            ? crypto.randomUUID()
-            : playerId;
-
-          if (!this.players.has(actualPlayerId)) {
-            this.players.set(actualPlayerId, {
-              name: generateSlug(1),
-              isHost: false,
-            });
-          }
-          if (this.players.size === 1) {
-            this.players.set(actualPlayerId, {
-              ...this.players.get(actualPlayerId)!,
-              isHost: true,
-            });
-          }
-
-          this.socketsMap.set(ws, { playerId: actualPlayerId });
-
-          this.sendJoined(ws, actualPlayerId);
-          this.sendUpdateRoom(ws, actualPlayerId);
-          this.reqSyncGame();
-
+          this.receivedJoin(ws, payload);
           break;
         }
         case "RENAME": {
@@ -131,6 +107,7 @@ class Room {
         case "UPDATE_GAME": {
           const { payload } = data;
           this.receievedUpdateGame(ws, payload);
+          break;
         }
       }
     });
@@ -159,6 +136,41 @@ class Room {
         }));
       }
     });
+  }
+
+  private receivedJoin(ws: WebSocket, payload: unknown) {
+    if (!payload || typeof payload !== "object" || !("player_id" in payload)) {
+      return; // TODO: no type
+    }
+
+    const playerId: string = "player_id" in payload
+      ? (payload as { player_id: string })["player_id"]
+      : crypto.randomUUID();
+
+    if (!this.players.has(playerId)) {
+      this.players.set(
+        playerId,
+        {
+          name: generateSlug(1),
+          isHost: false,
+        },
+      );
+    }
+    if (this.players.size === 1) {
+      this.players.set(
+        playerId,
+        {
+          ...this.players.get(playerId)!,
+          isHost: true,
+        },
+      );
+    }
+
+    this.socketsMap.set(ws, { playerId: playerId });
+
+    this.sendJoined(ws, playerId);
+    this.sendUpdateRoom(ws, playerId);
+    this.reqSyncGame();
   }
 
   private receievedUpdateGame(ws: WebSocket, payload: unknown) {
