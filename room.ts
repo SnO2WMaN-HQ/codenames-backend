@@ -142,8 +142,15 @@ class Room {
 
     const payload: {
       for: "all";
-      deck: { key: number; word: string; suggested_by: string[] }[];
-      players: { player_id: string; team: number; is_spymaster: boolean }[];
+      deck: {
+        key: number;
+        word: string;
+        suggested_by: string[];
+      }[];
+      teams: {
+        operatives: { player_id: string }[];
+        spymasters: { player_id: string }[];
+      }[];
     } = {
       for: "all",
       deck: represent.deck.map(({ key, suggestedBy, word }) => ({
@@ -151,10 +158,9 @@ class Room {
         word,
         suggested_by: suggestedBy,
       })),
-      players: represent.players.map(({ playerId, spymaster, team }) => ({
-        player_id: playerId,
-        team,
-        is_spymaster: spymaster,
+      teams: represent.teams.map(({ operatives, spymasters }) => ({
+        operatives: operatives.map(({ playerId }) => ({ player_id: playerId })),
+        spymasters: spymasters.map(({ playerId }) => ({ player_id: playerId })),
       })),
     };
     this.sockets.forEach((ws) => {

@@ -63,8 +63,25 @@ export class Game {
 
   repesentForAll(): {
     deck: { key: number; word: string; suggestedBy: string[] }[];
-    players: { playerId: string; team: number; spymaster: boolean }[];
+    teams: {
+      operatives: { playerId: string }[];
+      spymasters: { playerId: string }[];
+    }[];
   } {
+    const teams: {
+      operatives: { playerId: string }[];
+      spymasters: { playerId: string }[];
+    }[] = [...new Array(this.teamsCount)].map((_, i) => ({
+      operatives: Array
+        .from(this.playerRoles.entries())
+        .filter(([, { team, spymaster }]) => (!spymaster && team === i + 1))
+        .map(([playerId]) => ({ playerId })),
+      spymasters: Array
+        .from(this.playerRoles.entries())
+        .filter(([, { team, spymaster }]) => (spymaster && team === i + 1))
+        .map(([playerId]) => ({ playerId })),
+    }));
+
     return {
       deck: this.deck.map(
         ({ word, suggestedBy }, i) => (
@@ -75,9 +92,7 @@ export class Game {
           }
         ),
       ),
-      players: Array.from(this.playerRoles.entries()).map(
-        ([playerId, { team, spymaster }]) => ({ playerId, team, spymaster }),
-      ),
+      teams,
     };
   }
 
