@@ -47,6 +47,7 @@ export class Game {
   private history: (
     | { type: "add_suggest"; playerId: string; key: number }
     | { type: "remove_suggest"; playerId: string; key: number }
+    | { type: "select"; playerId: string; key: number }
     | { type: "join_operative"; playerId: string; team: number }
     | { type: "join_spymaster"; playerId: string; team: number }
   )[];
@@ -138,6 +139,26 @@ export class Game {
 
   select(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
+
+    const player = this.playerRoles.get(playerId);
+    if (
+      !player || // not exists player ||
+      this.turn === player.team || // not in current team
+      player.spymaster // not operative
+    ) {
+      return false;
+    }
+
+    this.history.push({ type: "select", playerId, key });
+
+    this.deck[key].revealed = true;
+    this.deck[key].suggestedBy.clear();
+
+    if (this.deck[key].role === this.turn + 1) { // correct
+    } else if (this.deck[key].role === -1) { // killer
+    } else { // wrong
+      this.turn = (this.turn + 1) % this.teamsCount; // turn
+    }
 
     return true;
   }
