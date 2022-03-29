@@ -38,6 +38,7 @@ export class Game {
     word: string;
     role: number;
     suggestedBy: Set<string>;
+    revealed: boolean;
   }[];
   private history: (
     | { type: "add_suggest"; playerId: string; key: number }
@@ -53,6 +54,7 @@ export class Game {
         ? -1
         : teamAssign.findIndex((tm) => tm.includes(index)) + 1,
       suggestedBy: new Set(),
+      revealed: false,
     }));
 
     this.teamsCount = teamAssign.length;
@@ -61,59 +63,20 @@ export class Game {
     this.history = [];
   }
 
-  repesentForAll(): {
-    deck: { key: number; word: string; suggestedBy: string[] }[];
-    teams: {
-      operatives: { playerId: string }[];
-      spymasters: { playerId: string }[];
-    }[];
-  } {
-    const teams: {
-      operatives: { playerId: string }[];
-      spymasters: { playerId: string }[];
-    }[] = [...new Array(this.teamsCount)].map((_, i) => ({
-      operatives: Array
-        .from(this.playerRoles.entries())
-        .filter(([, { team, spymaster }]) => (!spymaster && team === i + 1))
-        .map(([playerId]) => ({ playerId })),
-      spymasters: Array
-        .from(this.playerRoles.entries())
-        .filter(([, { team, spymaster }]) => (spymaster && team === i + 1))
-        .map(([playerId]) => ({ playerId })),
-    }));
+  represent(playerId: string) {
+    const isSpymaster = this.playerRoles.get(playerId)?.spymaster || false;
 
-    return {
-      deck: this.deck.map(
-        ({ word, suggestedBy }, i) => (
-          {
-            key: i,
-            word,
-            suggestedBy: Array.from(suggestedBy.values()),
-          }
-        ),
-      ),
-      teams,
-    };
-  }
-
-  repesentForSpymaster(): {
-    deck: { key: number; word: string; suggestedBy: string[]; role: number }[];
-    teams: {
-      operatives: { playerId: string }[];
-      spymasters: { playerId: string }[];
-    }[];
-  } {
     const deck: {
       key: number;
       word: string;
       suggestedBy: string[];
-      role: number;
+      role: number | null;
     }[] = this.deck.map(
-      ({ word, suggestedBy, role }, i) => (
+      ({ word, suggestedBy, role, revealed }, i) => (
         {
           key: i,
           word,
-          role,
+          role: isSpymaster || revealed ? role : null,
           suggestedBy: Array.from(suggestedBy.values()),
         }
       ),
@@ -132,11 +95,7 @@ export class Game {
         .map(([playerId]) => ({ playerId })),
     }));
 
-    return { deck: deck, teams };
-  }
-
-  private isSpyMaseter(playerId: string) {
-    return true;
+    return { deck, teams };
   }
 
   addSuggest(playerId: string, key: number): boolean {

@@ -84,11 +84,11 @@ class Room {
             });
           }
 
+          this.socketsMap.set(ws, { playerId: actualPlayerId });
+
           this.sendJoined(ws, actualPlayerId);
           this.sendUpdateRoom(ws, actualPlayerId);
-          this.reqSyncGame(actualPlayerId);
-
-          this.socketsMap.set(ws, { playerId: actualPlayerId });
+          this.reqSyncGame();
 
           break;
         }
@@ -125,7 +125,7 @@ class Room {
 
           this.currentGame = createGame({ deadWords, wordsAssign, wordsCount });
           this.sendUpdateRoom(ws, playerId);
-          this.reqSyncGame(playerId);
+          this.reqSyncGame();
           break;
         }
         case "UPDATE_GAME": {
@@ -134,155 +134,6 @@ class Room {
         }
       }
     });
-  }
-
-  private reqSyncGame(playerId: string) {
-    if (!this.currentGame) return;
-
-    const represent = this.currentGame.repesentForAll();
-
-    const payload: {
-      for: "all";
-      deck: {
-        key: number;
-        word: string;
-        suggested_by: string[];
-      }[];
-      teams: {
-        operatives: { player_id: string }[];
-        spymasters: { player_id: string }[];
-      }[];
-    } = {
-      for: "all",
-      deck: represent.deck.map(({ key, suggestedBy, word }) => ({
-        key,
-        word,
-        suggested_by: suggestedBy,
-      })),
-      teams: represent.teams.map(({ operatives, spymasters }) => ({
-        operatives: operatives.map(({ playerId }) => ({ player_id: playerId })),
-        spymasters: spymasters.map(({ playerId }) => ({ player_id: playerId })),
-      })),
-    };
-    this.socketsMap.forEach(({ playerId }, ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
-      }
-    });
-  }
-
-  private reqSyncForSpymaster(ws: WebSocket, playerId: string) {
-    if (!this.currentGame) return;
-
-    const represent = this.currentGame.repesentForSpymaster();
-
-    const payload: {
-      for: "spymaster";
-      deck: {
-        key: number;
-        word: string;
-        role: number;
-        suggested_by: string[];
-      }[];
-      teams: {
-        operatives: { player_id: string }[];
-        spymasters: { player_id: string }[];
-      }[];
-    } = {
-      for: "spymaster",
-      deck: represent.deck.map(({ key, suggestedBy, role, word }) => ({
-        key,
-        word,
-        role,
-        suggested_by: suggestedBy,
-      })),
-      teams: represent.teams.map(({ operatives, spymasters }) => ({
-        operatives: operatives.map(({ playerId }) => ({ player_id: playerId })),
-        spymasters: spymasters.map(({ playerId }) => ({ player_id: playerId })),
-      })),
-    };
-    ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
-  }
-
-  private receievedUpdateGame(ws: WebSocket, payload: unknown) {
-    if (!this.currentGame) return; // TODO: no game
-    if (!payload || typeof payload !== "object" || !("type" in payload)) return; // TODO: no type
-
-    switch ((payload as { type: string }).type) {
-      case "add_suggest": {
-        if (
-          !((p): p is { player_id: string; key: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "key" in p && typeof (p as any).key === "number")(payload)
-        ) {
-          break;
-        }
-
-        const { player_id: playerId, key } = payload;
-        this.currentGame.addSuggest(playerId, key);
-        this.reqSyncGame(playerId);
-        break;
-      }
-      case "remove_suggest": {
-        if (
-          !((p): p is { player_id: string; key: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "key" in p && typeof (p as any).key === "number")(payload)
-        ) {
-          break; // TODO: invalid payload
-        }
-
-        const { player_id: playerId, key } = payload;
-        this.currentGame.removeSuggest(playerId, key);
-        this.reqSyncGame(playerId);
-        break;
-      }
-      case "select": {
-        if (
-          !((p): p is { player_id: string; key: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "key" in p && typeof (p as any).key === "number")(payload)
-        ) {
-          break;
-        }
-        const { player_id: playerId, key } = payload;
-        this.currentGame.select(playerId, key);
-        this.reqSyncGame(playerId);
-        break;
-      }
-      case "join_operative": {
-        if (
-          !((p): p is { player_id: string; team: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "team" in p && typeof (p as any).team === "number")(payload)
-        ) {
-          break;
-        }
-        const { player_id: playerId, team } = payload;
-        this.currentGame.joinOperative(playerId, team);
-        this.reqSyncGame(playerId);
-        break;
-      }
-      case "join_spymaster": {
-        if (
-          !((p): p is { player_id: string; team: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "team" in p && typeof (p as any).team === "number")(payload)
-        ) {
-          break;
-        }
-        const { player_id: playerId, team } = payload;
-        const mr = this.currentGame.joinSpymaseter(playerId, team);
-        if (!mr) {
-          this.reqSyncGame(playerId);
-          this.reqSyncForSpymaster(ws, playerId);
-        }
-        break;
-      }
-      default: { // invalid type
-        break;
-      }
-    }
   }
 
   private sendJoined(ws: WebSocket, playerId: string) {
@@ -306,6 +157,119 @@ class Room {
           method: "UPDATE_ROOM",
           payload: { players, is_playing: this.currentGame !== null },
         }));
+      }
+    });
+  }
+
+  private receievedUpdateGame(ws: WebSocket, payload: unknown) {
+    if (!this.currentGame) return; // TODO: no game
+    if (!payload || typeof payload !== "object" || !("type" in payload)) return; // TODO: no type
+
+    switch ((payload as { type: string }).type) {
+      case "add_suggest": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break;
+        }
+
+        const { player_id: playerId, key } = payload;
+        this.currentGame.addSuggest(playerId, key);
+        this.reqSyncGame();
+        break;
+      }
+      case "remove_suggest": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break; // TODO: invalid payload
+        }
+
+        const { player_id: playerId, key } = payload;
+        this.currentGame.removeSuggest(playerId, key);
+        this.reqSyncGame();
+        break;
+      }
+      case "select": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "key" in p && typeof (p as any).key === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, key } = payload;
+        this.currentGame.select(playerId, key);
+        this.reqSyncGame();
+        break;
+      }
+      case "join_operative": {
+        if (
+          !((p): p is { player_id: string; team: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "team" in p && typeof (p as any).team === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, team } = payload;
+        this.currentGame.joinOperative(playerId, team);
+        this.reqSyncGame();
+        break;
+      }
+      case "join_spymaster": {
+        if (
+          !((p): p is { player_id: string; team: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "team" in p && typeof (p as any).team === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, team } = payload;
+        this.currentGame.joinSpymaseter(playerId, team);
+        this.reqSyncGame();
+        break;
+      }
+      default: { // invalid type
+        break;
+      }
+    }
+  }
+
+  private reqSyncGame() {
+    if (!this.currentGame) return;
+
+    this.socketsMap.forEach(({ playerId }, ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        const represent = this.currentGame!.represent(playerId);
+        if (!represent) return;
+
+        const payload: {
+          deck: { key: number; word: string; suggested_by: string[] }[];
+          teams: {
+            operatives: { player_id: string }[];
+            spymasters: { player_id: string }[];
+          }[];
+        } = {
+          deck: represent.deck.map(({ key, suggestedBy, word, role }) => ({
+            key,
+            word,
+            role,
+            suggested_by: suggestedBy,
+          })),
+          teams: represent.teams.map(({ operatives, spymasters }) => ({
+            operatives: operatives.map(({ playerId }) => ({
+              player_id: playerId,
+            })),
+            spymasters: spymasters.map(({ playerId }) => ({
+              player_id: playerId,
+            })),
+          })),
+        };
+        ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
       }
     });
   }
