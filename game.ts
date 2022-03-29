@@ -165,7 +165,13 @@ export class Game {
 
   joinOperative(playerId: string, team: number): boolean {
     if (team < 1 || this.teamsCount < team) return false;
-    if (this.playerRoles.has(playerId)) return false;
+
+    const player = this.playerRoles.get(playerId);
+    if (
+      player // if player belong to somewhere
+    ) {
+      return false;
+    }
 
     this.playerRoles.set(playerId, { team, spymaster: false });
     this.history.push({ type: "join_operative", playerId, team });
@@ -177,7 +183,14 @@ export class Game {
     if (team < 1 || this.teamsCount < team) return false;
 
     const player = this.playerRoles.get(playerId);
-    if (!player || player.team !== team || player.spymaster) return false;
+    if (
+      player && (
+        player.team !== team || // if player belong to somewhere and choose other team
+        player.spymaster // if player belong to somewhere and already spymaster
+      )
+    ) {
+      return false;
+    }
 
     this.playerRoles.set(playerId, { team, spymaster: true });
     this.history.push({ type: "join_spymaster", playerId, team });
