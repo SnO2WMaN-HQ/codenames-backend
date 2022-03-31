@@ -45,12 +45,15 @@ export class Game {
     revealed: boolean;
   }[];
   private history: (
-    | { type: "add_suggest"; playerId: string; key: number }
-    | { type: "remove_suggest"; playerId: string; key: number }
-    | { type: "select"; playerId: string; key: number }
     | { type: "join_operative"; playerId: string; team: number }
     | { type: "join_spymaster"; playerId: string; team: number }
+    | { type: "add_suggest"; playerId: string; key: number }
+    | { type: "remove_suggest"; playerId: string; key: number }
     | { type: "submit_hint"; playerId: string; word: string; count: number }
+    | { type: "select"; playerId: string; key: number }
+    | { type: "lose_team"; team: number }
+    | { type: "end_turn"; from: number; to: number }
+    | { type: "end_game" }
   )[];
 
   private turn: number;
@@ -74,9 +77,34 @@ export class Game {
     this.currentHint = null;
   }
 
-  represent(playerId: string) {
+  represent(playerId: string): {
+    turn: number;
+    currentHint: { word: string; count: number } | null;
+    deck: {
+      key: number;
+      word: string;
+      suggestedBy: string[];
+      role: number | null;
+    }[];
+    teams: {
+      operatives: { playerId: string }[];
+      spymasters: { playerId: string }[];
+    }[];
+    history: (
+      | { type: "join_operative"; playerId: string; team: number }
+      | { type: "join_spymaster"; playerId: string; team: number }
+      | { type: "add_suggest"; playerId: string; key: number }
+      | { type: "remove_suggest"; playerId: string; key: number }
+      | { type: "submit_hint"; playerId: string; word: string; count: number }
+      | { type: "select"; playerId: string; key: number }
+      | { type: "lose_team"; team: number }
+      | { type: "end_turn"; from: number; to: number }
+      | { type: "end_game" }
+    )[];
+  } {
     const isSpymaster = this.playerRoles.get(playerId)?.spymaster || false;
 
+    const turn = this.turn + 1;
     const currentHint: {
       word: string;
       count: number;
@@ -109,12 +137,14 @@ export class Game {
         .filter(([, { team, spymaster }]) => (spymaster && team === i + 1))
         .map(([playerId]) => ({ playerId })),
     }));
+    const history = this.history;
 
     return {
       currentHint,
-      turn: this.turn + 1,
+      turn: turn,
       deck,
       teams,
+      history,
     };
   }
 

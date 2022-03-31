@@ -284,6 +284,31 @@ class Room {
             operatives: { player_id: string }[];
             spymasters: { player_id: string }[];
           }[];
+          history: (
+            | {
+              type: "submit_hint";
+              player_id: string;
+              word: string;
+              count: number;
+            }
+            | {
+              type: "select";
+              player_id: string;
+              key: number;
+            }
+            | {
+              type: "lose_team";
+              team: number;
+            }
+            | {
+              type: "end_turn";
+              from: number;
+              to: number;
+            }
+            | {
+              type: "end_game";
+            }
+          )[];
         } = {
           current_hint: represent.currentHint
             ? {
@@ -306,6 +331,60 @@ class Room {
               player_id: playerId,
             })),
           })),
+          history: represent.history.filter(
+            (item): item is
+              | {
+                type: "submit_hint";
+                playerId: string;
+                word: string;
+                count: number;
+              }
+              | { type: "select"; playerId: string; key: number }
+              | { type: "lose_team"; team: number }
+              | { type: "end_turn"; from: number; to: number }
+              | { type: "end_game" } =>
+              item.type === "submit_hint" ||
+              item.type === "select" ||
+              item.type === "lose_team" ||
+              item.type === "end_turn" ||
+              item.type === "end_game",
+          ).map((item):
+            | {
+              type: "submit_hint";
+              player_id: string;
+              word: string;
+              count: number;
+            }
+            | { type: "select"; player_id: string; key: number }
+            | { type: "lose_team"; team: number }
+            | { type: "end_turn"; from: number; to: number }
+            | { type: "end_game" } => {
+            switch (item.type) {
+              case "submit_hint":
+                return {
+                  type: item.type,
+                  player_id: item.playerId,
+                  word: item.word,
+                  count: item.count,
+                };
+              case "select":
+                return {
+                  type: item.type,
+                  player_id: item.playerId,
+                  key: item.key,
+                };
+              case "lose_team":
+                return { type: item.type, team: item.team };
+              case "end_turn":
+                return {
+                  type: item.type,
+                  from: item.from,
+                  to: item.to,
+                };
+              case "end_game":
+                return { type: item.type };
+            }
+          }),
         };
         ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
       }
