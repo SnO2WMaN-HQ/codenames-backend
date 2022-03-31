@@ -50,9 +50,11 @@ export class Game {
     | { type: "select"; playerId: string; key: number }
     | { type: "join_operative"; playerId: string; team: number }
     | { type: "join_spymaster"; playerId: string; team: number }
+    | { type: "submit_hint"; playerId: string; word: string; count: number }
   )[];
 
   private turn: number;
+  private currentHint: { word: string; count: number } | null;
 
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
     this.deck = words.map((word, index) => ({
@@ -69,11 +71,16 @@ export class Game {
 
     this.history = [];
     this.turn = 0;
+    this.currentHint = null;
   }
 
   represent(playerId: string) {
     const isSpymaster = this.playerRoles.get(playerId)?.spymaster || false;
 
+    const currentHint: {
+      word: string;
+      count: number;
+    } | null = this.currentHint;
     const deck: {
       key: number;
       word: string;
@@ -104,6 +111,7 @@ export class Game {
     }));
 
     return {
+      currentHint,
       turn: this.turn + 1,
       deck,
       teams,
@@ -137,8 +145,27 @@ export class Game {
     return true;
   }
 
+  submitHint(playerId: string, word: string, count: number) {
+    if (this.currentHint !== null) return false; // already submit hint
+
+    const player = this.playerRoles.get(playerId);
+    if (
+      !player || // not exists player ||
+      this.turn === player.team || // not in current team
+      !player.spymaster // not spymaster
+    ) {
+      return false;
+    }
+
+    this.currentHint = { count, word };
+    this.history.push({ type: "submit_hint", playerId, word: word, count });
+    return true;
+  }
+
   select(playerId: string, key: number): boolean {
     if (key < 0 || this.deck.length <= key) return false;
+
+    if (this.currentHint === null) return false; // not submit hint
 
     const player = this.playerRoles.get(playerId);
     if (
@@ -156,8 +183,9 @@ export class Game {
 
     if (this.deck[key].role === this.turn + 1) { // correct
     } else if (this.deck[key].role === -1) { // killer
-    } else { // wrong
-      this.turn = (this.turn + 1) % this.teamsCount; // turn
+    } else { // wrong turn
+      this.currentHint = null;
+      this.turn = (this.turn + 1) % this.teamsCount;
     }
 
     return true;

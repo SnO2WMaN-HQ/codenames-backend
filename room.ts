@@ -246,6 +246,22 @@ class Room {
         this.reqSyncGame();
         break;
       }
+      case "submit_hint": {
+        if (
+          !((p): p is { player_id: string; word: string; count: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "word" in p && typeof (p as any).word === "string" &&
+            "count" in p && typeof (p as any).count === "number")(payload)
+        ) {
+          break;
+        }
+        console.dir(payload);
+        const { player_id: playerId, word, count } = payload;
+        if (this.currentGame.submitHint(playerId, word, count)) {
+          this.reqSyncGame();
+        }
+        break;
+      }
       default: { // invalid type
         break;
       }
@@ -261,6 +277,7 @@ class Room {
         if (!represent) return;
 
         const payload: {
+          current_hint: { word: string; count: number } | null;
           turn: number;
           deck: { key: number; word: string; suggested_by: string[] }[];
           teams: {
@@ -268,6 +285,12 @@ class Room {
             spymasters: { player_id: string }[];
           }[];
         } = {
+          current_hint: represent.currentHint
+            ? {
+              word: represent.currentHint.word,
+              count: represent.currentHint.count,
+            }
+            : null,
           turn: represent.turn,
           deck: represent.deck.map(({ key, suggestedBy, word, role }) => ({
             key,
