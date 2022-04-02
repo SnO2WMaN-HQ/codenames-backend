@@ -80,11 +80,13 @@ export type HistoryItem =
 
 export class Game {
   private teamsCount: number;
-  private playerRoles: Map<string, {
-    team: number; // turn + 1
-
-    spymaster: boolean;
-  }>;
+  private playerRoles: Map<
+    string,
+    {
+      team: number; // turn + 1
+      spymaster: boolean;
+    }
+  >;
 
   private deck: {
     word: string;
@@ -130,6 +132,7 @@ export class Game {
       suggestedBy: string[];
     }[];
     teams: {
+      rank: number | null;
       operatives: { playerId: string }[];
       spymasters: { playerId: string }[];
     }[];
@@ -153,18 +156,29 @@ export class Game {
       ),
     );
     const teams: {
+      rank: number | null;
       operatives: { playerId: string }[];
       spymasters: { playerId: string }[];
-    }[] = [...new Array(this.teamsCount)].map((_, i) => ({
-      operatives: Array
+    }[] = [...new Array(this.teamsCount)].map((_, i) => {
+      const operatives = Array
         .from(this.playerRoles.entries())
         .filter(([, { team, spymaster }]) => (!spymaster && team === i + 1))
-        .map(([playerId]) => ({ playerId })),
-      spymasters: Array
+        .map(([playerId]) => ({ playerId }));
+      const spymasters = Array
         .from(this.playerRoles.entries())
         .filter(([, { team, spymaster }]) => (spymaster && team === i + 1))
-        .map(([playerId]) => ({ playerId })),
-    }));
+        .map(([playerId]) => ({ playerId }));
+
+      const lostIndex = this.losedTeams.findIndex((v) => v == i + 1);
+      const rank = lostIndex === -1
+        ? (this.losedTeams.length === this.teamsCount - 1 ? 1 : null)
+        : this.teamsCount - lostIndex;
+      return {
+        rank: rank,
+        operatives: operatives,
+        spymasters: spymasters,
+      };
+    });
     const history = this.history;
 
     return {

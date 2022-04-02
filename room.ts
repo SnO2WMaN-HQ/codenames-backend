@@ -32,10 +32,12 @@ export const findRoomFactory = () =>
   };
 
 export type SyncGamePayload = {
+  end: boolean;
   current_hint: { word: string; count: number } | null;
-  turn: number;
+  current_turn: number;
   deck: { key: number; word: string; suggested_by: string[] }[];
   teams: {
+    rank: number | null;
     operatives: { player_id: string }[];
     spymasters: { player_id: string }[];
   }[];
@@ -305,17 +307,14 @@ class Room {
     const represent = this.currentGame?.represent(playerId);
     if (!represent) return null;
 
-    const currentHint = represent.currentHint
-      ? { word: represent.currentHint.word, count: represent.currentHint.count }
-      : null;
-    const turn = represent.currentTurn;
     const deck = represent.deck.map(({ key, suggestedBy, word, role }) => ({
       key,
       word,
       role,
       suggested_by: suggestedBy,
     }));
-    const teams = represent.teams.map(({ operatives, spymasters }) => ({
+    const teams = represent.teams.map(({ operatives, spymasters, rank }) => ({
+      rank,
       operatives: operatives.map(({ playerId }) => ({
         player_id: playerId,
       })),
@@ -375,8 +374,14 @@ class Room {
     });
 
     return {
-      current_hint: currentHint,
-      turn: turn,
+      end: represent.end,
+      current_hint: represent.currentHint
+        ? {
+          word: represent.currentHint.word,
+          count: represent.currentHint.count,
+        }
+        : null,
+      current_turn: represent.currentTurn,
       deck: deck,
       teams: teams,
       history: history,
