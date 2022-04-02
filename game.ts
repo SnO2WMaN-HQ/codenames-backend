@@ -30,6 +30,50 @@ export const sortingCards = (
   ).map(([s, e]) => shuffle.slice(s, e));
 };
 
+export type HistoryItem =
+  | {
+    type: "join_operative";
+    playerId: string; // player id who joins
+    team: number; // team number
+  }
+  | {
+    type: "join_spymaster";
+    playerId: string; // player id who joins
+    team: number; // team number
+  }
+  | {
+    type: "add_suggest";
+    playerId: string; // player id who adds suggest
+    key: number; // key of card
+  }
+  | {
+    type: "remove_suggest";
+    playerId: string; // player id who removes suggest
+    key: number; // key of card
+  }
+  | {
+    type: "submit_hint";
+    playerId: string; // player id who submits
+    word: string;
+    count: number;
+  }
+  | {
+    type: "select_card";
+    playerId: string; // player id who select card
+    key: number; // key of card
+  }
+  | {
+    type: "lose_team";
+    team: number; // team number
+  }
+  | {
+    type: "end_turn";
+    from: number; // current team who ends turn
+    to: number; // next team
+  }
+  | {
+    type: "end_game";
+  };
 export class Game {
   private teamsCount: number;
   private playerRoles: Map<string, {
@@ -44,17 +88,7 @@ export class Game {
     suggestedBy: Set<string>;
     revealed: boolean;
   }[];
-  private history: (
-    | { type: "join_operative"; playerId: string; team: number }
-    | { type: "join_spymaster"; playerId: string; team: number }
-    | { type: "add_suggest"; playerId: string; key: number }
-    | { type: "remove_suggest"; playerId: string; key: number }
-    | { type: "submit_hint"; playerId: string; word: string; count: number }
-    | { type: "select"; playerId: string; key: number }
-    | { type: "lose_team"; team: number }
-    | { type: "end_turn"; from: number; to: number }
-    | { type: "end_game" }
-  )[];
+  private history: HistoryItem[];
 
   private turn: number;
   private currentHint: { word: string; count: number } | null;
@@ -90,17 +124,7 @@ export class Game {
       operatives: { playerId: string }[];
       spymasters: { playerId: string }[];
     }[];
-    history: (
-      | { type: "join_operative"; playerId: string; team: number }
-      | { type: "join_spymaster"; playerId: string; team: number }
-      | { type: "add_suggest"; playerId: string; key: number }
-      | { type: "remove_suggest"; playerId: string; key: number }
-      | { type: "submit_hint"; playerId: string; word: string; count: number }
-      | { type: "select"; playerId: string; key: number }
-      | { type: "lose_team"; team: number }
-      | { type: "end_turn"; from: number; to: number }
-      | { type: "end_game" }
-    )[];
+    history: HistoryItem[];
   } {
     const isSpymaster = this.playerRoles.get(playerId)?.spymaster || false;
 
@@ -157,7 +181,7 @@ export class Game {
     if (!player || player.spymaster || this.turn === player.team) return false;
 
     this.deck[key].suggestedBy.add(playerId);
-    this.history.push({ type: "add_suggest", key, playerId });
+    this.history.push({ type: "add_suggest", key, playerId: playerId });
 
     return true;
   }
@@ -170,7 +194,7 @@ export class Game {
     if (!player || player.spymaster || this.turn === player.team) return false;
 
     this.deck[key].suggestedBy.delete(playerId);
-    this.history.push({ type: "remove_suggest", key, playerId });
+    this.history.push({ type: "remove_suggest", key, playerId: playerId });
 
     return true;
   }
@@ -188,7 +212,12 @@ export class Game {
     }
 
     this.currentHint = { count, word };
-    this.history.push({ type: "submit_hint", playerId, word: word, count });
+    this.history.push({
+      type: "submit_hint",
+      playerId: playerId,
+      word: word,
+      count,
+    });
     return true;
   }
 
@@ -206,7 +235,7 @@ export class Game {
       return false;
     }
 
-    this.history.push({ type: "select", playerId, key });
+    this.history.push({ type: "select_card", playerId: playerId, key });
 
     this.deck[key].revealed = true;
     this.deck[key].suggestedBy.clear();
@@ -232,7 +261,7 @@ export class Game {
     }
 
     this.playerRoles.set(playerId, { team, spymaster: false });
-    this.history.push({ type: "join_operative", playerId, team });
+    this.history.push({ type: "join_operative", playerId: playerId, team });
 
     return true;
   }
@@ -251,7 +280,7 @@ export class Game {
     }
 
     this.playerRoles.set(playerId, { team, spymaster: true });
-    this.history.push({ type: "join_spymaster", playerId, team });
+    this.history.push({ type: "join_spymaster", playerId: playerId, team });
 
     return true;
   }

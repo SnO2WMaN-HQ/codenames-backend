@@ -2,7 +2,7 @@ import { Bson, Collection } from "mongo";
 
 import { generateSlug } from "random-word-slugs";
 
-import { createGame, Game } from "./game.ts";
+import { createGame, Game, HistoryItem } from "./game.ts";
 
 export const slugsMap = new Map<string, string>();
 export const roomsMap = new Map<string, Room>();
@@ -30,6 +30,23 @@ export const findRoomFactory = () =>
 
     return room;
   };
+
+export type SyncGamePayload = {
+  current_hint: { word: string; count: number } | null;
+  turn: number;
+  deck: { key: number; word: string; suggested_by: string[] }[];
+  teams: {
+    operatives: { player_id: string }[];
+    spymasters: { player_id: string }[];
+  }[];
+  history: (
+    | { type: "submit_hint"; player_id: string; word: string; count: number }
+    | { type: "select_card"; player_id: string; key: number }
+    | { type: "lose_team"; team: number }
+    | { type: "end_turn"; from: number; to: number }
+    | { type: "end_game" }
+  )[];
+};
 
 class Room {
   private readonly id: string;
@@ -102,7 +119,7 @@ class Room {
 
           this.currentGame = createGame({ deadWords, wordsAssign, wordsCount });
           this.sendUpdateRoom(ws, playerId);
-          this.reqSyncGame();
+          this.requestSyncGame();
           break;
         }
         case "UPDATE_GAME": {
@@ -171,7 +188,7 @@ class Room {
 
     this.sendJoined(ws, playerId);
     this.sendUpdateRoom(ws, playerId);
-    this.reqSyncGame();
+    this.requestSyncGame();
   }
 
   private receievedUpdateGame(ws: WebSocket, payload: unknown) {
@@ -189,8 +206,9 @@ class Room {
         }
 
         const { player_id: playerId, key } = payload;
-        this.currentGame.addSuggest(playerId, key);
-        this.reqSyncGame();
+        if (this.currentGame.addSuggest(playerId, key)) {
+          this.requestSyncGame();
+        }
         break;
       }
       case "remove_suggest": {
@@ -203,11 +221,12 @@ class Room {
         }
 
         const { player_id: playerId, key } = payload;
-        this.currentGame.removeSuggest(playerId, key);
-        this.reqSyncGame();
+        if (this.currentGame.removeSuggest(playerId, key)) {
+          this.requestSyncGame();
+        }
         break;
       }
-      case "select": {
+      case "select_card": {
         if (
           !((p): p is { player_id: string; key: number } =>
             "player_id" in p && typeof (p as any).player_id === "string" &&
@@ -216,8 +235,24 @@ class Room {
           break;
         }
         const { player_id: playerId, key } = payload;
-        this.currentGame.select(playerId, key);
-        this.reqSyncGame();
+        if (this.currentGame.select(playerId, key)) {
+          this.requestSyncGame();
+        }
+        break;
+      }
+      case "submit_hint": {
+        if (
+          !((p): p is { player_id: string; word: string; count: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string" &&
+            "word" in p && typeof (p as any).word === "string" &&
+            "count" in p && typeof (p as any).count === "number")(payload)
+        ) {
+          break;
+        }
+        const { player_id: playerId, word, count } = payload;
+        if (this.currentGame.submitHint(playerId, word, count)) {
+          this.requestSyncGame();
+        }
         break;
       }
       case "join_operative": {
@@ -230,7 +265,7 @@ class Room {
         }
         const { player_id: playerId, team } = payload;
         this.currentGame.joinOperative(playerId, team);
-        this.reqSyncGame();
+        this.requestSyncGame();
         break;
       }
       case "join_spymaster": {
@@ -242,23 +277,8 @@ class Room {
           break;
         }
         const { player_id: playerId, team } = payload;
-        this.currentGame.joinSpymaseter(playerId, team);
-        this.reqSyncGame();
-        break;
-      }
-      case "submit_hint": {
-        if (
-          !((p): p is { player_id: string; word: string; count: number } =>
-            "player_id" in p && typeof (p as any).player_id === "string" &&
-            "word" in p && typeof (p as any).word === "string" &&
-            "count" in p && typeof (p as any).count === "number")(payload)
-        ) {
-          break;
-        }
-        console.dir(payload);
-        const { player_id: playerId, word, count } = payload;
-        if (this.currentGame.submitHint(playerId, word, count)) {
-          this.reqSyncGame();
+        if (this.currentGame.joinSpymaseter(playerId, team)) {
+          this.requestSyncGame();
         }
         break;
       }
@@ -268,127 +288,98 @@ class Room {
     }
   }
 
-  private reqSyncGame() {
+  private requestSyncGame() {
     if (!this.currentGame) return;
 
     this.socketsMap.forEach(({ playerId }, ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        const represent = this.currentGame!.represent(playerId);
-        if (!represent) return;
+      if (ws.readyState === WebSocket.OPEN) return;
 
-        const payload: {
-          current_hint: { word: string; count: number } | null;
-          turn: number;
-          deck: { key: number; word: string; suggested_by: string[] }[];
-          teams: {
-            operatives: { player_id: string }[];
-            spymasters: { player_id: string }[];
-          }[];
-          history: (
-            | {
-              type: "submit_hint";
-              player_id: string;
-              word: string;
-              count: number;
-            }
-            | {
-              type: "select";
-              player_id: string;
-              key: number;
-            }
-            | {
-              type: "lose_team";
-              team: number;
-            }
-            | {
-              type: "end_turn";
-              from: number;
-              to: number;
-            }
-            | {
-              type: "end_game";
-            }
-          )[];
-        } = {
-          current_hint: represent.currentHint
-            ? {
-              word: represent.currentHint.word,
-              count: represent.currentHint.count,
-            }
-            : null,
-          turn: represent.turn,
-          deck: represent.deck.map(({ key, suggestedBy, word, role }) => ({
-            key,
-            word,
-            role,
-            suggested_by: suggestedBy,
-          })),
-          teams: represent.teams.map(({ operatives, spymasters }) => ({
-            operatives: operatives.map(({ playerId }) => ({
-              player_id: playerId,
-            })),
-            spymasters: spymasters.map(({ playerId }) => ({
-              player_id: playerId,
-            })),
-          })),
-          history: represent.history.filter(
-            (item): item is
-              | {
-                type: "submit_hint";
-                playerId: string;
-                word: string;
-                count: number;
-              }
-              | { type: "select"; playerId: string; key: number }
-              | { type: "lose_team"; team: number }
-              | { type: "end_turn"; from: number; to: number }
-              | { type: "end_game" } =>
-              item.type === "submit_hint" ||
-              item.type === "select" ||
-              item.type === "lose_team" ||
-              item.type === "end_turn" ||
-              item.type === "end_game",
-          ).map((item):
-            | {
-              type: "submit_hint";
-              player_id: string;
-              word: string;
-              count: number;
-            }
-            | { type: "select"; player_id: string; key: number }
-            | { type: "lose_team"; team: number }
-            | { type: "end_turn"; from: number; to: number }
-            | { type: "end_game" } => {
-            switch (item.type) {
-              case "submit_hint":
-                return {
-                  type: item.type,
-                  player_id: item.playerId,
-                  word: item.word,
-                  count: item.count,
-                };
-              case "select":
-                return {
-                  type: item.type,
-                  player_id: item.playerId,
-                  key: item.key,
-                };
-              case "lose_team":
-                return { type: item.type, team: item.team };
-              case "end_turn":
-                return {
-                  type: item.type,
-                  from: item.from,
-                  to: item.to,
-                };
-              case "end_game":
-                return { type: item.type };
-            }
-          }),
-        };
-        ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
+      const payload = this.getSyncGamePayload(playerId);
+      if (!payload) return;
+
+      ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
+    });
+  }
+
+  private getSyncGamePayload(playerId: string): SyncGamePayload | null {
+    const represent = this.currentGame?.represent(playerId);
+    if (!represent) return null;
+
+    const currentHint = represent.currentHint
+      ? { word: represent.currentHint.word, count: represent.currentHint.count }
+      : null;
+    const turn = represent.turn;
+    const deck = represent.deck.map(({ key, suggestedBy, word, role }) => ({
+      key,
+      word,
+      role,
+      suggested_by: suggestedBy,
+    }));
+    const teams = represent.teams.map(({ operatives, spymasters }) => ({
+      operatives: operatives.map(({ playerId }) => ({
+        player_id: playerId,
+      })),
+      spymasters: spymasters.map(({ playerId }) => ({
+        player_id: playerId,
+      })),
+    }));
+    const history = represent.history.filter(
+      (item): item is
+        | {
+          type: "submit_hint";
+          playerId: string;
+          word: string;
+          count: number;
+        }
+        | { type: "select_card"; playerId: string; key: number }
+        | { type: "lose_team"; team: number }
+        | { type: "end_turn"; from: number; to: number }
+        | { type: "end_game" } =>
+        item.type === "submit_hint" ||
+        item.type === "select_card" ||
+        item.type === "lose_team" ||
+        item.type === "end_turn" ||
+        item.type === "end_game",
+    ).map((item): SyncGamePayload["history"][number] => {
+      switch (item.type) {
+        case "submit_hint":
+          return {
+            type: "submit_hint",
+            player_id: item.playerId,
+            word: item.word,
+            count: item.count,
+          };
+        case "select_card":
+          return {
+            type: "select_card",
+            player_id: item.playerId,
+            key: item.key,
+          };
+        case "lose_team":
+          return {
+            type: "lose_team",
+            team: item.team,
+          };
+        case "end_turn":
+          return {
+            type: "end_turn",
+            from: item.from,
+            to: item.to,
+          };
+        case "end_game":
+          return {
+            type: "end_game",
+          };
       }
     });
+
+    return {
+      current_hint: currentHint,
+      turn: turn,
+      deck: deck,
+      teams: teams,
+      history: history,
+    };
   }
 
   private postponeBreak() {
