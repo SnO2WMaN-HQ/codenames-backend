@@ -43,7 +43,8 @@ export type SyncGamePayload = {
     | { type: "submit_hint"; player_id: string; word: string; count: number }
     | { type: "select_card"; player_id: string; key: number }
     | { type: "lose_team"; team: number }
-    | { type: "end_turn"; from: number; to: number }
+    | { type: "end_turn"; team: number }
+    | { type: "start_turn"; team: number }
     | { type: "end_game" }
   )[];
 };
@@ -161,9 +162,8 @@ class Room {
       return; // TODO: no type
     }
 
-    const playerId: string = "player_id" in payload
-      ? (payload as { player_id: string })["player_id"]
-      : crypto.randomUUID();
+    const playerId: string = (payload as { player_id: string })["player_id"] ||
+      crypto.randomUUID();
 
     if (!this.players.has(playerId)) {
       this.players.set(
@@ -235,7 +235,7 @@ class Room {
           break;
         }
         const { player_id: playerId, key } = payload;
-        if (this.currentGame.select(playerId, key)) {
+        if (this.currentGame.selectCard(playerId, key)) {
           this.requestSyncGame();
         }
         break;
@@ -292,10 +292,10 @@ class Room {
     if (!this.currentGame) return;
 
     this.socketsMap.forEach(({ playerId }, ws) => {
-      if (ws.readyState === WebSocket.OPEN) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
 
       const payload = this.getSyncGamePayload(playerId);
-      if (!payload) return;
+      if (payload === null) return;
 
       ws.send(JSON.stringify({ method: "SYNC_GAME", payload: payload }));
     });
@@ -308,7 +308,7 @@ class Room {
     const currentHint = represent.currentHint
       ? { word: represent.currentHint.word, count: represent.currentHint.count }
       : null;
-    const turn = represent.turn;
+    const turn = represent.currentTurn;
     const deck = represent.deck.map(({ key, suggestedBy, word, role }) => ({
       key,
       word,
@@ -324,21 +324,18 @@ class Room {
       })),
     }));
     const history = represent.history.filter(
-      (item): item is
-        | {
-          type: "submit_hint";
-          playerId: string;
-          word: string;
-          count: number;
-        }
-        | { type: "select_card"; playerId: string; key: number }
-        | { type: "lose_team"; team: number }
-        | { type: "end_turn"; from: number; to: number }
-        | { type: "end_game" } =>
+      (item): item is Exclude<
+        HistoryItem,
+        | { type: "join_operative" }
+        | { type: "join_spymaster" }
+        | { type: "add_suggest" }
+        | { type: "remove_suggest" }
+      > =>
         item.type === "submit_hint" ||
         item.type === "select_card" ||
         item.type === "lose_team" ||
         item.type === "end_turn" ||
+        item.type === "start_turn" ||
         item.type === "end_game",
     ).map((item): SyncGamePayload["history"][number] => {
       switch (item.type) {
@@ -363,8 +360,12 @@ class Room {
         case "end_turn":
           return {
             type: "end_turn",
-            from: item.from,
-            to: item.to,
+            team: item.team,
+          };
+        case "start_turn":
+          return {
+            type: "start_turn",
+            team: item.team,
           };
         case "end_game":
           return {
