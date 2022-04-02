@@ -125,6 +125,11 @@ class Room {
           this.requestSyncGame();
           break;
         }
+        case "CLOSE_GAME": {
+          const { payload } = data;
+          this.recievedCloseGame(ws, payload);
+          break;
+        }
         case "UPDATE_GAME": {
           const { payload } = data;
           this.receievedUpdateGame(ws, payload);
@@ -191,6 +196,11 @@ class Room {
     this.sendJoined(ws, playerId);
     this.sendUpdateRoom(ws, playerId);
     this.requestSyncGame();
+  }
+
+  private recievedCloseGame(ws: WebSocket, payload: unknown) {
+    this.currentGame = null;
+    this.sendUpdateRoom(ws, "");
   }
 
   private receievedUpdateGame(ws: WebSocket, payload: unknown) {
