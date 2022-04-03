@@ -63,6 +63,10 @@ export type HistoryItem =
     key: number; // key of card
   }
   | {
+    type: "finish_estimate";
+    playerId: string;
+  }
+  | {
     type: "lose_team";
     team: number; // team number
   }
@@ -99,6 +103,7 @@ export class Game {
   private currentTeam: number;
   private losedTeams: number[];
   private currentHint: { word: string; count: number } | null;
+  private chain: number;
 
   private end: boolean;
   constructor(words: string[], teamAssign: number[][], deadAssign: number[]) {
@@ -119,6 +124,7 @@ export class Game {
     this.currentHint = null;
     this.losedTeams = [];
     this.end = false;
+    this.chain = 0;
   }
 
   represent(playerId: string): {
@@ -298,20 +304,38 @@ export class Game {
 
     if (this.deck[key].role === -1) { // killer
       this.loseTeam();
-      this.checkEnd();
+      this.checkGameEnded();
     } else if (this.deck[key].role !== player.team) { // wrong card
       this.endCurrentTurn();
-      this.checkEnd();
+      this.checkGameEnded();
       if (!this.end) this.startNextTurn();
     } else { // correct card
-      this.checkEnd();
+      this.chain++;
+      this.checkGameEnded();
+      if (!this.end && this.currentHint.count + 1 === this.chain) {
+        this.endCurrentTurn();
+        this.startNextTurn();
+      }
     }
+
+    return true;
+  }
+
+  finishEstimate(playerId: string) {
+    if (this.end) return false;
+    if (this.chain === 0) return false;
+
+    this.history.push({ type: "finish_estimate", playerId: playerId });
+
+    this.endCurrentTurn();
+    this.startNextTurn();
 
     return true;
   }
 
   private endCurrentTurn() {
     this.currentHint = null;
+    this.chain = 0;
     this.swipeSuggests();
 
     this.history.push({ type: "end_turn", team: this.currentTeam });
@@ -334,7 +358,7 @@ export class Game {
     this.history.push({ type: "lose_team", team: this.currentTeam });
   }
 
-  private checkEnd() {
+  private checkGameEnded() {
     if (!(this.losedTeams.length === this.teamsCount - 1)) return;
 
     this.history.push({ type: "end_game" });

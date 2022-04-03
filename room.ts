@@ -44,6 +44,7 @@ export type SyncGamePayload = {
   history: (
     | { type: "submit_hint"; player_id: string; word: string; count: number }
     | { type: "select_card"; player_id: string; key: number }
+    | { type: "finish_estimate"; player_id: string }
     | { type: "lose_team"; team: number }
     | { type: "end_turn"; team: number }
     | { type: "start_turn"; team: number }
@@ -267,6 +268,21 @@ class Room {
         }
         break;
       }
+      case "finish_estimate": {
+        if (
+          !((p): p is { player_id: string; key: number } =>
+            "player_id" in p && typeof (p as any).player_id === "string")(
+              payload,
+            )
+        ) {
+          break;
+        }
+        const { player_id: playerId } = payload;
+        if (this.currentGame.finishEstimate(playerId)) {
+          this.requestSyncGame();
+        }
+        break;
+      }
       case "join_operative": {
         if (
           !((p): p is { player_id: string; team: number } =>
@@ -333,15 +349,19 @@ class Room {
       })),
     }));
     const history = represent.history.filter(
-      (item): item is Exclude<
+      (item): item is Extract<
         HistoryItem,
-        | { type: "join_operative" }
-        | { type: "join_spymaster" }
-        | { type: "add_suggest" }
-        | { type: "remove_suggest" }
+        | { type: "submit_hint" }
+        | { type: "select_card" }
+        | { type: "finish_estimate" }
+        | { type: "lose_team" }
+        | { type: "end_turn" }
+        | { type: "start_turn" }
+        | { type: "end_game" }
       > =>
         item.type === "submit_hint" ||
         item.type === "select_card" ||
+        item.type === "finish_estimate" ||
         item.type === "lose_team" ||
         item.type === "end_turn" ||
         item.type === "start_turn" ||
@@ -360,6 +380,11 @@ class Room {
             type: "select_card",
             player_id: item.playerId,
             key: item.key,
+          };
+        case "finish_estimate":
+          return {
+            type: "finish_estimate",
+            player_id: item.playerId,
           };
         case "lose_team":
           return {
